@@ -12,7 +12,7 @@
  */
 cl::opt<std::string>
     knob_gating_type("gating",
-                     cl::desc("gating function: cap/lsm - default: cap"),
+                     cl::desc("gating function: cap/lsm/audit - default: cap"),
                      cl::init("cap"));
 
 cl::opt<bool> knob_gatlin_critical_var(
@@ -104,6 +104,10 @@ cl::opt<string>
 cl::opt<string> knob_lsm_function_list("lsmhook",
                                        cl::desc("lsm hook function name list"),
                                        cl::init("lsm.hook"));
+
+cl::opt<string> knob_audit_function_list("audithook",
+                                       cl::desc("audit hook function name list"),
+                                       cl::init("audit.hook"));
 
 cl::opt<string> knob_crit_symbol(
     "critsym",

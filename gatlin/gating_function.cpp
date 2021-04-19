@@ -470,3 +470,111 @@ void GatingDAC::dump() {
   }
   errs() << "=o=\n";
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Audit
+
+void GatingAudit::load_audit_hook_list(std::string &file) {
+  std::ifstream input(file);
+  if (!input.is_open())
+    return;
+  std::string line;
+  while (std::getline(input, line))
+    audit_hook_names.insert(line);
+  input.close();
+  errs() << "Load Audit hook list, total:" << audit_hook_names.size() << "\n";
+}
+
+bool GatingAudit::is_audit_hook(StringRef &str) {
+  if (audit_hook_names.size()) {
+    return audit_hook_names.find(str) != audit_hook_names.end();
+  }
+  // use builtin name
+  if (str.startswith("audit_"))
+    return true;
+  return false;
+}
+
+GatingAudit::GatingAudit(Module &module, std::string &auditfile)
+    : GatingFunctionBase(module) {
+  errs() << "Gating Function Type: Audit\n";
+  load_audit_hook_list(auditfile);
+  for (Module::iterator fi = module.begin(), f_end = module.end(); fi != f_end;
+       ++fi) {
+    Function *func = dyn_cast<Function>(fi);
+    StringRef fname = func->getName();
+    if (is_audit_hook(fname)) {
+      audit_hook_functions.insert(func);
+    }
+  }
+
+  // also try to discover wrapper function for audit hooks
+  FunctionSet wrappers;
+  int loop_cnt = 0;
+again:
+  for (auto *audith : audit_hook_functions) {
+    errs() << " audith - " << audith->getName() << "\n";
+    for (auto *u : audith->users()) {
+      // should be call instruction and the callee is dacf
+      InstructionSet uis;
+      if (Instruction *i = dyn_cast<Instruction>(u))
+        uis.insert(i);
+      else
+        uis = get_user_instruction(dyn_cast<Value>(u));
+      if (uis.size() == 0) {
+        u->print(errs());
+        errs() << "\n";
+        continue;
+      }
+      for (auto ui : uis) {
+        CallInst *ci = dyn_cast<CallInst>(ui);
+        if (!ci)
+          continue;
+        Function *callee = get_callee_function_direct(ci);
+        if (callee != audith)
+          continue;
+        Function *userf = ci->getFunction();
+        errs() << "    used by - " << userf->getName() << "\n";
+        // parameters comes from wrapper's parameter?
+        for (unsigned int i = 0; i < ci->getNumOperands(); i++) {
+          Value *a = ci->getOperand(i);
+          if (use_parent_func_arg_deep(a, userf) >= 0) {
+            wrappers.insert(userf);
+            break;
+          }
+        }
+      }
+    }
+  }
+  if (wrappers.size()) {
+    for (auto *wf : wrappers)
+      audit_hook_functions.insert(wf);
+    wrappers.clear();
+    loop_cnt++;
+    if (loop_cnt < 1)
+      goto again;
+  }
+
+}
+
+bool GatingAudit::is_gating_function(Function *f) {
+  return audit_hook_functions.find(f) != audit_hook_functions.end();
+}
+
+bool GatingAudit::is_gating_function(std::string &str) {
+  for (auto f : audit_hook_functions) {
+    if (f->getName() == str)
+      return true;
+  }
+  return false;
+}
+
+void GatingAudit::dump() {
+  errs() << ANSI_COLOR(BG_BLUE, FG_WHITE)
+         << "=Audit hook functions (total:" << audit_hook_functions.size()
+         << ")=" << ANSI_COLOR_RESET << "\n";
+  for (auto f : audit_hook_functions) {
+    errs() << ". " << f->getName() << "\n";
+  }
+  errs() << "=o=\n";
+}

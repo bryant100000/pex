@@ -32,6 +32,23 @@ public:
   virtual void dump_interesting(InstructionSet *);
 };
 
+class GatingAudit : public GatingFunctionBase {
+protected:
+  FunctionSet audit_hook_functions;
+  StringSet audit_hook_names;
+
+private:
+  void load_audit_hook_list(std::string &);
+  bool is_audit_hook(StringRef &);
+
+public:
+  GatingAudit(Module &, std::string &);
+  ~GatingAudit(){};
+  virtual bool is_gating_function(Function *);
+  virtual bool is_gating_function(std::string &);
+  virtual void dump();
+};
+
 class GatingCap : public GatingFunctionBase {
 protected:
   /*

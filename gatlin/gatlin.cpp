@@ -1276,7 +1276,7 @@ void gatlin::collect_chkps(Module &module) {
       }
     }
   }
-#if 0
+#if 1
     //dump all checks
     for(auto& pair: f2chks)
     {
@@ -1650,8 +1650,14 @@ void gatlin::collect_crits(Module &module) {
   for (auto pair : f2chks) {
     Function *func = pair.first;
     InstructionSet *_chks = pair.second;
+    // errs() << "!!!function: " << func->getName() << "\n";
+    if(is_skip_function(func->getName())){
+      // errs() << "!!!SKIPPED FUNC: " << func->getName() << "\n";
+      continue;
+    }
     if ((_chks == NULL) || (_chks->size() == 0) ||
         gating->is_gating_function(func) || is_skip_function(func->getName())) {
+      // errs() << "!!!SKIPPED FUNC: " << func->getName() << "\n";
       continue;
     }
     dbgstk.push_back(func->getEntryBlock().getFirstNonPHI());
@@ -2782,6 +2788,8 @@ void gatlin::process_cpgf(Module &module) {
     gating = new GatingLSM(module, knob_lsm_function_list);
   else if (knob_gating_type == "dac")
     gating = new GatingDAC(module);
+  else if (knob_gating_type == "audit")
+    gating = new GatingAudit(module, knob_audit_function_list);
   else
     llvm_unreachable("invalid setting!");
   STOP_WATCH_STOP(WID_0);
