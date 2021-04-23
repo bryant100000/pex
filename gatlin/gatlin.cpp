@@ -1253,6 +1253,9 @@ FunctionSet gatlin::resolve_indirect_callee(CallInst *ci) {
  * f2chks: Function to Gating Function CallSite
  */
 void gatlin::collect_chkps(Module &module) {
+  if (knob_gating_type == "audit-lsm" || knob_gating_type == "lsm-audit")
+    return _collect_chkps_audit(module);
+
   for (auto func : all_functions) {
     if (gating->is_gating_function(func))
       continue;
@@ -1272,6 +1275,49 @@ void gatlin::collect_chkps(Module &module) {
           if (Function *_f = get_callee_function_direct(ci)) {
             if (gating->is_gating_function(_f))
               chks->insert(ci);
+          }
+      }
+    }
+  }
+#if 1
+    //dump all checks
+    for(auto& pair: f2chks)
+    {
+        ValueSet visited;
+        Function* f = pair.first;
+        InstructionSet* chkins = pair.second;
+        if (chkins->size()==0)
+            continue;
+        gating->dump_interesting(chkins);
+    }
+#endif
+}
+
+// Audit-LSM mapping version
+void gatlin::_collect_chkps_audit(Module &module) {
+  for (auto func : all_functions) {
+    if (gating->is_gating_function(func) || gating_other->is_gating_function(func))
+      continue;
+
+    InstructionSet *chks = f2chks[func];
+    if (!chks) {
+      chks = new InstructionSet();
+      f2chks[func] = chks;
+    }
+
+    for (Function::iterator fi = func->begin(), fe = func->end(); fi != fe;
+         ++fi) {
+      BasicBlock *bb = dyn_cast<BasicBlock>(fi);
+      for (BasicBlock::iterator ii = bb->begin(), ie = bb->end(); ii != ie;
+           ++ii) {
+        if (CallInst *ci = dyn_cast<CallInst>(ii))
+          if (Function *_f = get_callee_function_direct(ci)) {
+            if (gating->is_gating_function(_f))
+              chks->insert(ci);
+	    if (gating_other->is_gating_function(_f)) {
+	      errs() << "<> Found gating (other): " << _f->getName() << "\n";
+	      critical_functions.insert(_f);
+	    }
           }
       }
     }
@@ -2698,8 +2744,12 @@ rescan_and_add_all:
   /*
    * checked, merge forward slicing result(intra-) and collect more(inter-)
    */
-  for (auto i : current_crit_funcs)
-    critical_functions.insert(i);
+  if (knob_gating_type != "audit-lsm" && knob_gating_type != "lsm-audit") {
+    for (auto i : current_crit_funcs) 
+      critical_functions.insert(i);
+  } else {
+    errs() << "Ignoring default critical functions!" << "\n";
+  }
   for (auto v : current_critical_variables)
     critical_variables.insert(v);
   for (auto v : current_critical_type_fields) {
@@ -2788,8 +2838,16 @@ void gatlin::process_cpgf(Module &module) {
     gating = new GatingLSM(module, knob_lsm_function_list);
   else if (knob_gating_type == "dac")
     gating = new GatingDAC(module);
-  else if (knob_gating_type == "audit")
+  else if (knob_gating_type == "audit-lsm") {
+    // discover Audit [default gating module] -> LSM mappings
     gating = new GatingAudit(module, knob_audit_function_list);
+    gating_other = new GatingLSM(module, knob_lsm_function_list);
+  } 
+  else if (knob_gating_type == "lsm-audit") {
+    // discover LSM [default gating module] -> Audit mappings
+    gating = new GatingLSM(module, knob_lsm_function_list);
+    gating_other = new GatingAudit(module, knob_audit_function_list);
+  }
   else
     llvm_unreachable("invalid setting!");
   STOP_WATCH_STOP(WID_0);

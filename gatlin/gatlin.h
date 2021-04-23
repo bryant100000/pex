@@ -93,6 +93,7 @@ private:
   void collect_wrappers(Module &module);
   void collect_crits(Module &module);
   void collect_chkps(Module &);
+  void _collect_chkps_audit(Module &module);
   void identify_interesting_struct(Module &);
   void identify_kmi(Module &);
   void identify_dynamic_kmi(Module &);
@@ -215,6 +216,9 @@ private:
   Module *m;
 
   GatingFunctionBase *gating;
+
+  // Audit-only
+  GatingFunctionBase *gating_other;
 
   // map function to its check instruction
   Function2ChkInst f2ci;

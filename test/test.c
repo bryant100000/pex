@@ -56,6 +56,7 @@ void device_function()
 //critical function
 void bar()
 {
+	security_log();
 	printf("This is protected function\n");
 }
 
@@ -102,6 +103,7 @@ void bar_open()
 void dummy()
 {
     struct non_trivial_struct b;
+    audit_log();
     x86_64_start_kernel();
     bar_open();
     xxx_ptr = &xxx;
