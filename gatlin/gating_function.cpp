@@ -518,8 +518,8 @@ bool GatingAudit::is_audit_hook(StringRef &str) {
     return audit_hook_names.find(str) != audit_hook_names.end();
   }
   // use builtin name
-  if (str.startswith("audit_"))
-    return true;
+  // if (str.startswith("audit_"))
+  //   return true;
   return false;
 }
 
