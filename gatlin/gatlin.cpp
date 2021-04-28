@@ -1315,7 +1315,7 @@ void gatlin::_collect_chkps_audit(Module &module) {
             if (gating->is_gating_function(_f))
               chks->insert(ci);
 	    if (gating_other->is_gating_function(_f)) {
-	      errs() << "<> Found gating (other): " << _f->getName() << "\n";
+	      // errs() << "<> Found gating (other): " << _f->getName() << "\n";
 	      critical_functions.insert(_f);
 	    }
           }
@@ -2781,9 +2781,8 @@ rescan_and_add_all:
   if (knob_gating_type != "audit-lsm" && knob_gating_type != "lsm-audit") {
     for (auto i : current_crit_funcs) 
       critical_functions.insert(i);
-  } else {
-    errs() << "Ignoring default critical functions!" << "\n";
-  }
+  } 
+  
   for (auto v : current_critical_variables)
     critical_variables.insert(v);
   for (auto v : current_critical_type_fields) {

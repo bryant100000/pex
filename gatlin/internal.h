@@ -187,7 +187,10 @@ struct str2int {
     "_raw_spin_lock",
     "_raw_read_unlock_irqrestore",
     "_raw_read_lock_irqsave",
-    "__put_task_struct"};
+    "__put_task_struct",
+    "pointer",
+    "finish_task_switch",
+    "__free_irq"};
 
 /*
  * builtin list of interesting keywords
