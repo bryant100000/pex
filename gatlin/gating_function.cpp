@@ -297,6 +297,30 @@ bool GatingLSM::is_lsm_hook(StringRef &str) {
   return false;
 }
 
+void GatingLSM::init_reachable() {
+  for (auto elem : lsm_hook_names)
+    {
+        std:string hook_name = elem;
+        reachable_hooks[hook_name] = 0;
+    }
+}
+
+void GatingLSM::add_reachable(StringRef str) {
+  std:string hook_name = str;
+  reachable_hooks[hook_name] = 1;
+}
+
+void GatingLSM::dump_reachable(std::string& filename) {
+  ofstream mapfile;
+  mapfile.open (filename);
+  mapfile << "Hook, Reachable\n";
+  for (auto x : reachable_hooks){
+    mapfile << x.first << "," << x.second << "\n";
+  }
+  mapfile.close();
+}
+
+
 GatingLSM::GatingLSM(Module &module, std::string &lsmfile)
     : GatingFunctionBase(module) {
   errs() << "Gating Function Type: LSM\n";
@@ -310,6 +334,7 @@ GatingLSM::GatingLSM(Module &module, std::string &lsmfile)
     }
   }
 
+  init_reachable();
   // also try to discover wrapper function for LSM hooks
   FunctionSet wrappers;
   int loop_cnt = 0;
@@ -348,14 +373,17 @@ again:
       }
     }
   }
-  if (wrappers.size()) {
-    for (auto *wf : wrappers)
-      lsm_hook_functions.insert(wf);
-    wrappers.clear();
-    loop_cnt++;
-    if (loop_cnt < 1)
-      goto again;
-  }
+
+  // NOT ADDING WRAPPERS AS OF NOW
+
+  // if (wrappers.size()) {
+  //   for (auto *wf : wrappers)
+  //     lsm_hook_functions.insert(wf);
+  //   wrappers.clear();
+  //   loop_cnt++;
+  //   if (loop_cnt < 1)
+  //     goto again;
+  // }
 }
 
 bool GatingLSM::is_gating_function(Function *f) {
@@ -508,52 +536,54 @@ GatingAudit::GatingAudit(Module &module, std::string &auditfile)
     }
   }
 
+  // NOT ADDING AUDIT WRAPPERS AS OF NOW
+
   // also try to discover wrapper function for audit hooks
-  FunctionSet wrappers;
-  int loop_cnt = 0;
-again:
-  for (auto *audith : audit_hook_functions) {
-    errs() << " audith - " << audith->getName() << "\n";
-    for (auto *u : audith->users()) {
-      // should be call instruction and the callee is dacf
-      InstructionSet uis;
-      if (Instruction *i = dyn_cast<Instruction>(u))
-        uis.insert(i);
-      else
-        uis = get_user_instruction(dyn_cast<Value>(u));
-      if (uis.size() == 0) {
-        u->print(errs());
-        errs() << "\n";
-        continue;
-      }
-      for (auto ui : uis) {
-        CallInst *ci = dyn_cast<CallInst>(ui);
-        if (!ci)
-          continue;
-        Function *callee = get_callee_function_direct(ci);
-        if (callee != audith)
-          continue;
-        Function *userf = ci->getFunction();
-        errs() << "    used by - " << userf->getName() << "\n";
-        // parameters comes from wrapper's parameter?
-        for (unsigned int i = 0; i < ci->getNumOperands(); i++) {
-          Value *a = ci->getOperand(i);
-          if (use_parent_func_arg_deep(a, userf) >= 0) {
-            wrappers.insert(userf);
-            break;
-          }
-        }
-      }
-    }
-  }
-  if (wrappers.size()) {
-    for (auto *wf : wrappers)
-      audit_hook_functions.insert(wf);
-    wrappers.clear();
-    loop_cnt++;
-    if (loop_cnt < 1)
-      goto again;
-  }
+//   FunctionSet wrappers;
+//   int loop_cnt = 0;
+// again:
+//   for (auto *audith : audit_hook_functions) {
+//     errs() << " audith - " << audith->getName() << "\n";
+//     for (auto *u : audith->users()) {
+//       // should be call instruction and the callee is dacf
+//       InstructionSet uis;
+//       if (Instruction *i = dyn_cast<Instruction>(u))
+//         uis.insert(i);
+//       else
+//         uis = get_user_instruction(dyn_cast<Value>(u));
+//       if (uis.size() == 0) {
+//         u->print(errs());
+//         errs() << "\n";
+//         continue;
+//       }
+//       for (auto ui : uis) {
+//         CallInst *ci = dyn_cast<CallInst>(ui);
+//         if (!ci)
+//           continue;
+//         Function *callee = get_callee_function_direct(ci);
+//         if (callee != audith)
+//           continue;
+//         Function *userf = ci->getFunction();
+//         errs() << "    used by - " << userf->getName() << "\n";
+//         // parameters comes from wrapper's parameter?
+//         for (unsigned int i = 0; i < ci->getNumOperands(); i++) {
+//           Value *a = ci->getOperand(i);
+//           if (use_parent_func_arg_deep(a, userf) >= 0) {
+//             wrappers.insert(userf);
+//             break;
+//           }
+//         }
+//       }
+//     }
+//   }
+//   if (wrappers.size()) {
+//     for (auto *wf : wrappers)
+//       audit_hook_functions.insert(wf);
+//     wrappers.clear();
+//     loop_cnt++;
+//     if (loop_cnt < 1)
+//       goto again;
+//   }
 
 }
 

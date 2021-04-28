@@ -1324,15 +1324,18 @@ void gatlin::_collect_chkps_audit(Module &module) {
   }
 #if 1
     //dump all checks
-    for(auto& pair: f2chks)
-    {
-        ValueSet visited;
-        Function* f = pair.first;
-        InstructionSet* chkins = pair.second;
-        if (chkins->size()==0)
-            continue;
-        gating->dump_interesting(chkins);
-    }
+    // errs() << "DUMPING ALL CHECKS" << "\n";
+    // for(auto& pair: f2chks)
+    // {
+    //     ValueSet visited;
+    //     Function* f = pair.first;
+    //     errs() << "Funtion: " << f->getName() << "\n";
+    //     InstructionSet* chkins = pair.second;
+    //     if (chkins->size()==0)
+    //         continue;
+    //       errs() << "Dump Interesting" << "\n";
+    //     gating->dump_interesting(chkins);
+    // }
 #endif
 }
 
@@ -1760,8 +1763,13 @@ InstructionSet *gatlin::discover_chks(Function *f, FunctionSet &visited) {
       if (!nextf) // ignore all indirect call
         continue;
       if (InstructionSet *r = discover_chks(nextf, visited))
-        if (r->size())
+        if (r->size()){
           ret->insert(ci);
+          for (auto *a : *r){
+            ret->insert(a);
+          }
+        }
+
     }
   }
   pthread_rwlock_wrlock(&dc_lock);
@@ -1846,16 +1854,30 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
    * }                             |
    *-------------------------------------------------------
    */
+
+  // if (dt.dominates(chk, I)) DON'T NEED THIS CHECK ANYMORE
+  
   chks = discover_chks(f);
   if ((chks != NULL) && chks->size()) {
     for (auto *chk : *chks) {
-      if (dt.dominates(chk, I)) {
+      if (1) {
         if (knob_dump_good_path) {
           errs() << ANSI_COLOR(BG_GREEN, FG_BLACK)
                  << "Hit Check Function:" << get_callee_function_name(chk)
                  << " @ ";
           chk->getDebugLoc().print(errs());
           errs() << ANSI_COLOR_RESET << "\n";
+          
+          // adding the actual LSM hook as reachable during the hit
+          if(knob_gating_type == "lsm-audit"){
+            if (CallInst *ci = dyn_cast<CallInst>(chk)){
+              if (Function *_f = get_callee_function_direct(ci)){
+                if (gating->is_gating_function(_f)){
+                  gating->add_reachable(_f->getName()); 
+                }
+              }
+            }
+          }
         }
         good++;
         goto good_out;
@@ -2113,8 +2135,8 @@ void gatlin::_check_critical_function_usage(Module *module, int tid,
     if (!crit_syms->use_builtin())             // means that not knob specified
       if (!crit_syms->exists(func->getName())) // means that symbol not matched
         continue;
-    if (is_skip_function(func->getName()))
-      continue;
+    // if (is_skip_function(func->getName()))
+    //   continue;
 
     // x_lock.lock();
     errs() << ANSI_COLOR_YELLOW << "Check Use of Function:" << func->getName()
@@ -2148,6 +2170,18 @@ void gatlin::_check_critical_function_usage(Module *module, int tid,
         indirect_callsite_set.insert(cs);
 #endif
     // summary
+
+      // finding LSM functions that are reachable from audit hooks
+      // even if there is one good path we mark LSM hook as reachable
+    if(good != 0){
+      if(knob_gating_type == "audit-lsm"){
+          if (gating_other->is_gating_function(func)){
+            gating_other->add_reachable(func->getName()); 
+          }
+        }
+    }
+
+
     if (bad != 0) {
       errs() << ANSI_COLOR_GREEN << "Good: " << good << " " << ANSI_COLOR_RED
              << "Bad: " << bad << " " << ANSI_COLOR_YELLOW
@@ -2912,6 +2946,16 @@ void gatlin::process_cpgf(Module &module) {
     STOP_WATCH_MON(WID_0, check_critical_type_field_usage(module));
   }
   dump_non_kinit();
+  errs() << "DUMPING REACHABLE HOOKS IN CSV FILE" << "\n";
+  if (knob_gating_type == "audit-lsm"){
+    std::string filename = "audit_lsm_mapping.csv";
+    gating_other->dump_reachable(filename);
+  }
+  if (knob_gating_type == "lsm-audit"){
+    std::string filename = "lsm_audit_mapping.csv";
+    gating->dump_reachable(filename);
+  }
+  
   delete skip_funcs;
   delete skip_vars;
   delete crit_syms;

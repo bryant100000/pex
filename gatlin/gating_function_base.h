@@ -30,6 +30,8 @@ public:
   virtual bool is_gating_function(std::string &) { return false; };
   virtual void dump(){};
   virtual void dump_interesting(InstructionSet *);
+  virtual void dump_reachable(std::string &){};
+  virtual void add_reachable(StringRef){};
 };
 
 class GatingAudit : public GatingFunctionBase {
@@ -77,6 +79,7 @@ class GatingLSM : public GatingFunctionBase {
 protected:
   FunctionSet lsm_hook_functions;
   StringSet lsm_hook_names;
+  Str2Int reachable_hooks;
 
 private:
   void load_lsm_hook_list(std::string &);
@@ -85,6 +88,9 @@ private:
 public:
   GatingLSM(Module &, std::string &);
   ~GatingLSM(){};
+  void init_reachable();
+  virtual void add_reachable(StringRef);
+  virtual void dump_reachable(std::string &);
   virtual bool is_gating_function(Function *);
   virtual bool is_gating_function(std::string &);
   virtual void dump();
