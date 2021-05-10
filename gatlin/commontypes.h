@@ -46,6 +46,7 @@ typedef std::unordered_set<Function *> FunctionSet;
 typedef std::unordered_set<CallInst *> InDirectCallSites;
 typedef ValueSet ModuleSet;
 
+typedef std::unordered_map<Function *, FunctionSet *> Function2FunctionSet;
 typedef std::unordered_map<Function *, _REACHABLE> FunctionToCheckResult;
 typedef std::unordered_map<Function *, InstructionSet *> Function2ChkInst;
 typedef std::unordered_map<Function *, InstructionSet *> Function2CSInst;
@@ -59,6 +60,7 @@ typedef std::unordered_map<Value *, InstructionSet *> Value2ChkInst;
 typedef std::unordered_map<Instruction *, FunctionSet *> Inst2Func;
 typedef std::unordered_map<const Instruction *, FunctionSet *> ConstInst2Func;
 typedef std::unordered_map<std::string, int> Str2Int;
+typedef std::unordered_map<std::string, Str2Int *> Str2Str2Int;
 
 // dynamic KMI
 // pair between indices and function set(fptr stored into this position)

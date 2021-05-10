@@ -1873,7 +1873,7 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
             if (CallInst *ci = dyn_cast<CallInst>(chk)){
               if (Function *_f = get_callee_function_direct(ci)){
                 if (gating->is_gating_function(_f)){
-                  gating->add_reachable(_f->getName()); 
+                  gating->add_reachable(_f->getName(), f); 
                 }
               }
             }
@@ -2176,7 +2176,7 @@ void gatlin::_check_critical_function_usage(Module *module, int tid,
     if(good != 0){
       if(knob_gating_type == "audit-lsm"){
           if (gating_other->is_gating_function(func)){
-            gating_other->add_reachable(func->getName()); 
+            gating_other->add_reachable(func->getName(), func); 
           }
         }
     }
@@ -2874,11 +2874,11 @@ void gatlin::process_cpgf(Module &module) {
   else if (knob_gating_type == "audit-lsm") {
     // discover Audit [default gating module] -> LSM mappings
     gating = new GatingAudit(module, knob_audit_function_list);
-    gating_other = new GatingLSM(module, knob_lsm_function_list);
+    gating_other = new GatingLSM(module, knob_lsm_function_list, 1);
   } 
   else if (knob_gating_type == "lsm-audit") {
     // discover LSM [default gating module] -> Audit mappings
-    gating = new GatingLSM(module, knob_lsm_function_list);
+    gating = new GatingLSM(module, knob_lsm_function_list, 1);
     gating_other = new GatingAudit(module, knob_audit_function_list);
   }
   else
