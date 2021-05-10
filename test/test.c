@@ -53,11 +53,17 @@ void device_function()
 	printf("this is device function\n");
 }
 
+// dummy LSM hook
+void wrapper() {
+	security_log();
+}
+
 //critical function
 void bar()
 {
 	security_log();
 	printf("This is protected function\n");
+	audit_log();
 }
 
 void foo()
