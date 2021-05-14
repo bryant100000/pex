@@ -1,7 +1,7 @@
 Gatlin: Gating Function Checker for Linux Kernel (Updated FORK for CS 598 Project)
 -------
 
-This repo builds upon the PeX tool to find the mappings between LSM and Audit Hooks. The code for reachability analysis in built on top of PeX (can be seen in the new commit diffs)
+This repo builds upon the PeX tool to find the mappings between LSM and Audit Hooks. The code for reachability analysis and LSM <-> Audit is built on top of PeX (can be seen in the new commit diffs)
 
 
 
@@ -21,7 +21,7 @@ The mappings between LSM<->Audit are stored in the folders:
 **Folder : mapping_wrappers** 
 * Fine-grained reachability analysis 
 * specifies the exact audit hooks that the LSM hooks are reachable from 
-* Also caters to LSM wrappers)
+* Also caters to LSM wrappers
 
 # SETUP INSTRUCTIONS
 
