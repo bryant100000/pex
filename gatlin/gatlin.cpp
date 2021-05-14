@@ -1273,8 +1273,9 @@ void gatlin::collect_chkps(Module &module) {
            ++ii) {
         if (CallInst *ci = dyn_cast<CallInst>(ii))
           if (Function *_f = get_callee_function_direct(ci)) {
-            if (gating->is_gating_function(_f))
+            if (gating->is_gating_function(_f)){
               chks->insert(ci);
+            }
           }
       }
     }
@@ -1312,12 +1313,39 @@ void gatlin::_collect_chkps_audit(Module &module) {
            ++ii) {
         if (CallInst *ci = dyn_cast<CallInst>(ii))
           if (Function *_f = get_callee_function_direct(ci)) {
-            if (gating->is_gating_function(_f))
+            if (knob_gating_type == "lsm-audit" && (gating->is_gating_function(_f))){
               chks->insert(ci);
-	    if (gating_other->is_gating_function(_f)) {
+              // errs() << "INSERTING CHECKS " << *ci << "\n"; 
+            }
+
+            if (knob_gating_type == "lsm-audit" && (gating->is_wrapper_function(_f))){
+              chks->insert(ci);
+              // errs() << "INSERTING CHECKS " << *ci << "\n"; 
+            }
+            if (knob_gating_type == "audit-lsm" && (gating->is_gating_function(_f)) ){
+              chks->insert(ci);
+              // errs() << "INSERTING CHECKS " << *ci << "\n"; 
+            }
+	    
+      if (knob_gating_type == "lsm-audit" && gating_other->is_gating_function(_f)) {
 	      // errs() << "<> Found gating (other): " << _f->getName() << "\n";
 	      critical_functions.insert(_f);
+        // errs() << "INSERTING CRITICAL FUNCTIONS:  " << _f->getName() << "\n"; 
 	    }
+
+      if (knob_gating_type == "audit-lsm" && gating_other->is_gating_function(_f)) {
+        // errs() << "<> Found gating (other): " << _f->getName() << "\n";
+        critical_functions.insert(_f);
+        // errs() << "INSERTING CRITICAL FUNCTIONS:  " << _f->getName() << "\n"; 
+      }
+
+      if (knob_gating_type == "audit-lsm" && gating_other->is_wrapper_function(_f)) {
+        // errs() << "<> Found gating (other): " << _f->getName() << "\n";
+        critical_functions.insert(_f);
+        // errs() << "INSERTING CRITICAL FUNCTIONS:  " << _f->getName() << "\n"; 
+      }
+
+
           }
       }
     }
@@ -1800,7 +1828,7 @@ InstructionSet *gatlin::discover_chks(Function *f) {
 void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
                                             Instruction *I,
                                             FunctionToCheckResult &fvisited,
-                                            int &good, int &bad, int &ignored) {
+                                            int &good, int &bad, int &ignored, Function* crit_func) {
   // I should be an instruction
   if (!I)
     return;
@@ -1862,27 +1890,59 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
     for (auto *chk : *chks) {
       if (1) {
         if (knob_dump_good_path) {
+          errs() << "GOOD PATH" << "\n";
+          // errs() << "CHK : " << *chk << "\n";
           errs() << ANSI_COLOR(BG_GREEN, FG_BLACK)
                  << "Hit Check Function:" << get_callee_function_name(chk)
                  << " @ ";
           chk->getDebugLoc().print(errs());
           errs() << ANSI_COLOR_RESET << "\n";
-          
+          }
           // adding the actual LSM hook as reachable during the hit
           if(knob_gating_type == "lsm-audit"){
             if (CallInst *ci = dyn_cast<CallInst>(chk)){
               if (Function *_f = get_callee_function_direct(ci)){
                 if (gating->is_gating_function(_f)){
-                  gating->add_reachable(_f->getName(), f); 
+                  gating->add_reachable(_f->getName(), crit_func->getName()); 
+                }
+                if (gating->is_wrapper_function(_f)){
+                  FunctionSet fset = gating->get_hook_from_wrapper(_f);
+                  for (auto fu : fset) {
+                    errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
+
+                    gating->add_reachable(fu->getName(), crit_func->getName());
+                  } 
                 }
               }
             }
           }
-        }
+
+
+          if(knob_gating_type == "audit-lsm"){
+            if (CallInst *ci = dyn_cast<CallInst>(chk)){
+              if (Function *_f = get_callee_function_direct(ci)){
+                if (gating->is_gating_function(_f)){
+                  if(gating_other->is_gating_function(crit_func)){
+                   gating_other->add_reachable(crit_func->getName(), _f->getName() ); 
+                  }
+                  else if(gating_other->is_wrapper_function(crit_func)){
+                    // errs() << " --- NEED TO FIND WRAPPERS ---!!!" << "\n";
+                    FunctionSet fset = gating_other->get_hook_from_wrapper(crit_func);
+                    for (auto fu : fset) {
+                      // errs() << "corresponding lsm hook" << fu->getName() << "\n";
+                      errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
+                      gating_other->add_reachable(fu->getName(), _f->getName());
+                    }
+                  }
+                }
+              }
+            }
+          }
         good++;
-        goto good_out;
+        
       }
     }
+    goto good_out;
   }
 
   if (is_syscall(f)) {
@@ -1913,7 +1973,7 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
       }
       resolved_as_call = true;
       backward_slice_build_callgraph(callgraph, dyn_cast<Instruction>(U),
-                                     fvisited, good, bad, ignored);
+                                     fvisited, good, bad, ignored, crit_func);
     }
     if (!resolved_as_call) {
       if (!isa<Instruction>(U)) {
@@ -1935,7 +1995,7 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
     }
   }
   // Indirect CallSite(also user of current function)
-  backward_slice_using_indcs(f, callgraph, fvisited, good, bad, ignored);
+  backward_slice_using_indcs(f, callgraph, fvisited, good, bad, ignored, crit_func);
 
 // intermediate.. just return.
 ignored_out:
@@ -1957,19 +2017,19 @@ bad_out:
 
 void gatlin::_backward_slice_reachable_to_chk_function(Instruction *I,
                                                        int &good, int &bad,
-                                                       int &ignored) {
+                                                       int &ignored, Function* crit_func) {
   InstructionList callgraph;
   // FIXME: should consider function+instruction pair as visited?
   FunctionToCheckResult fvisited;
   return backward_slice_build_callgraph(callgraph, I, fvisited, good, bad,
-                                        ignored);
+                                        ignored,crit_func);
 }
 
 void gatlin::backward_slice_reachable_to_chk_function(Instruction *cs,
                                                       int &good, int &bad,
-                                                      int &ignored) {
+                                                      int &ignored, Function* crit_func) {
   // collect all path and meet condition
-  _backward_slice_reachable_to_chk_function(cs, good, bad, ignored);
+  _backward_slice_reachable_to_chk_function(cs, good, bad, ignored,crit_func);
 }
 
 /*
@@ -1978,7 +2038,7 @@ void gatlin::backward_slice_reachable_to_chk_function(Instruction *cs,
 bool gatlin::match_cs_using_fptr_method_0(Function *func,
                                           InstructionList &callgraph,
                                           FunctionToCheckResult &visited,
-                                          int &good, int &bad, int &ignored) {
+                                          int &good, int &bad, int &ignored, Function* crit_func) {
   bool ret = false;
   InstructionSet *csis;
 
@@ -1988,7 +2048,7 @@ bool gatlin::match_cs_using_fptr_method_0(Function *func,
 
   ret = true;
   for (auto *csi : *csis)
-    backward_slice_build_callgraph(callgraph, csi, visited, good, bad, ignored);
+    backward_slice_build_callgraph(callgraph, csi, visited, good, bad, ignored, crit_func);
 end:
   return ret;
 }
@@ -1999,7 +2059,7 @@ end:
 bool gatlin::match_cs_using_fptr_method_1(Function *func,
                                           InstructionList &callgraph,
                                           FunctionToCheckResult &visited,
-                                          int &good, int &bad, int &ignored) {
+                                          int &good, int &bad, int &ignored, Function* crit_func) {
   // we want exact match to non-trivial function
   int cnt = 0;
   Type *func_type = func->getFunctionType();
@@ -2019,7 +2079,7 @@ bool gatlin::match_cs_using_fptr_method_1(Function *func,
       // errs()<<"Found matched functions for indirectcall:"
       //    <<(*fl->begin())->getName()<<"\n";
       backward_slice_build_callgraph(callgraph, idc, visited, good, bad,
-                                     ignored);
+                                     ignored, crit_func);
     }
   }
 end:
@@ -2031,7 +2091,7 @@ end:
  */
 bool gatlin::match_cs_using_cvf(Function *func, InstructionList &callgraph,
                                 FunctionToCheckResult &visited, int &good,
-                                int &bad, int &ignored) {
+                                int &bad, int &ignored, Function* crit_func) {
   // TODO: optimize this
   int cnt = 0;
   for (auto *idc : idcs) {
@@ -2043,7 +2103,7 @@ bool gatlin::match_cs_using_cvf(Function *func, InstructionList &callgraph,
         continue;
       cnt++;
       backward_slice_build_callgraph(callgraph, idc, visited, good, bad,
-                                     ignored);
+                                     ignored, crit_func);
       break;
     }
   }
@@ -2053,27 +2113,27 @@ bool gatlin::match_cs_using_cvf(Function *func, InstructionList &callgraph,
 bool gatlin::backward_slice_using_indcs(Function *func,
                                         InstructionList &callgraph,
                                         FunctionToCheckResult &visited,
-                                        int &good, int &bad, int &ignored) {
+                                        int &good, int &bad, int &ignored, Function* crit_func) {
   bool ret;
   /*
    * direct call using bitcast
    * this is exact match don't need to look further
    */
   ret = match_cs_using_fptr_method_0(func, callgraph, visited, good, bad,
-                                     ignored);
+                                     ignored, crit_func);
   if (ret)
     return ret;
 
   if (!knob_gatlin_cvf) {
     ret = match_cs_using_fptr_method_1(func, callgraph, visited, good, bad,
-                                       ignored);
+                                       ignored, crit_func);
     if (ret)
       MatchCallCriticalFuncPtr++;
     else
       UnMatchCallCriticalFuncPtr++;
     return ret;
   }
-  ret = match_cs_using_cvf(func, callgraph, visited, good, bad, ignored);
+  ret = match_cs_using_cvf(func, callgraph, visited, good, bad, ignored, crit_func);
   if (ret)
     MatchCallCriticalFuncPtr++;
   else
@@ -2149,7 +2209,7 @@ void gatlin::_check_critical_function_usage(Module *module, int tid,
       CallInstSet cil;
       get_callsite_inst(U, cil);
       for (auto cs : cil)
-        backward_slice_reachable_to_chk_function(cs, good, bad, ignored);
+        backward_slice_reachable_to_chk_function(cs, good, bad, ignored, func);
     }
     // indirect call
 #if 0
@@ -2173,13 +2233,13 @@ void gatlin::_check_critical_function_usage(Module *module, int tid,
 
       // finding LSM functions that are reachable from audit hooks
       // even if there is one good path we mark LSM hook as reachable
-    if(good != 0){
-      if(knob_gating_type == "audit-lsm"){
-          if (gating_other->is_gating_function(func)){
-            gating_other->add_reachable(func->getName(), func); 
-          }
-        }
-    }
+    // if(good != 0){
+    //   if(knob_gating_type == "audit-lsm"){
+    //       if (gating_other->is_gating_function(func)){
+    //         gating_other->add_reachable(func->getName(), func); 
+    //       }
+    //     }
+    // }
 
 
     if (bad != 0) {
@@ -2209,7 +2269,7 @@ void gatlin::_check_critical_function_usage(Module *module, int tid,
         continue;
       errs() << "    " << func->getName() << "\n";
     }
-    backward_slice_reachable_to_chk_function(cs, good, bad, ignored);
+    // backward_slice_reachable_to_chk_function(cs, good, bad, ignored,func);
   }
   // summary
   if (bad != 0) {
@@ -2301,7 +2361,7 @@ void gatlin::_check_critical_variable_usage(Module *module, int tid,
       // is this instruction reachable from non-checked path?
       int good = 0, bad = 0, ignored = 0;
       _backward_slice_reachable_to_chk_function(dyn_cast<Instruction>(U), good,
-                                                bad, ignored);
+                                                bad, ignored, f);
       if (bad != 0) {
         errs() << ANSI_COLOR_GREEN << "Good: " << good << " " << ANSI_COLOR_RED
                << "Bad: " << bad << " " << ANSI_COLOR_YELLOW
@@ -2374,7 +2434,7 @@ void gatlin::_check_critical_type_field_usage(Module *module, int tid,
       // is this instruction reachable from non-checked path?
       int good = 0, bad = 0, ignored = 0;
       _backward_slice_reachable_to_chk_function(dyn_cast<Instruction>(U), good,
-                                                bad, ignored);
+                                                bad, ignored, f);
       if (bad != 0) {
         errs() << ANSI_COLOR_GREEN << "Good: " << good << " " << ANSI_COLOR_RED
                << "Bad: " << bad << " " << ANSI_COLOR_YELLOW

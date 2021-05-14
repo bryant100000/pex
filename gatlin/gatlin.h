@@ -137,25 +137,25 @@ private:
   void backward_slice_build_callgraph(InstructionList &callgraph,
                                       Instruction *I,
                                       FunctionToCheckResult &fvisited,
-                                      int &good, int &bad, int &ignored);
+                                      int &good, int &bad, int &ignored, Function*);
   void _backward_slice_reachable_to_chk_function(Instruction *I, int &good,
-                                                 int &bad, int &ignored);
+                                                 int &bad, int &ignored, Function*);
   void backward_slice_reachable_to_chk_function(Instruction *I, int &good,
-                                                int &bad, int &ignored);
+                                                int &bad, int &ignored, Function*);
 
   bool backward_slice_using_indcs(Function *, InstructionList &callgraph,
                                   FunctionToCheckResult &visited, int &good,
-                                  int &bad, int &ignored);
+                                  int &bad, int &ignored, Function*);
 
   bool match_cs_using_fptr_method_0(Function *, InstructionList &callgraph,
                                     FunctionToCheckResult &visited, int &good,
-                                    int &bad, int &ignored);
+                                    int &bad, int &ignored, Function*);
   bool match_cs_using_fptr_method_1(Function *, InstructionList &callgraph,
                                     FunctionToCheckResult &visited, int &good,
-                                    int &bad, int &ignored);
+                                    int &bad, int &ignored, Function*);
   bool match_cs_using_cvf(Function *, InstructionList &callgraph,
                           FunctionToCheckResult &visited, int &good, int &bad,
-                          int &ignored);
+                          int &ignored, Function*);
 
   InstructionSet *discover_chks(Function *f);
   InstructionSet *discover_chks(Function *f, FunctionSet &visited);

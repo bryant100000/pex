@@ -12,6 +12,7 @@
 #include <stack>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include <llvm/IR/Function.h>
 
@@ -60,6 +61,7 @@ typedef std::unordered_map<Value *, InstructionSet *> Value2ChkInst;
 typedef std::unordered_map<Instruction *, FunctionSet *> Inst2Func;
 typedef std::unordered_map<const Instruction *, FunctionSet *> ConstInst2Func;
 typedef std::unordered_map<std::string, int> Str2Int;
+typedef std::unordered_map<std::string, std::vector<int>> Str2VectorInt;
 typedef std::unordered_map<std::string, Str2Int *> Str2Str2Int;
 
 // dynamic KMI

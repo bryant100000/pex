@@ -301,56 +301,84 @@ void GatingLSM::init_reachable() {
   for (auto elem : lsm_hook_names)
     {
         std:string hook_name = elem;
-        reachable_hooks[hook_name] = 0;
-	reachable_hooks_indiv[hook_name] = new Str2Int;
+        reachable_hooks[hook_name] = {0,0,0,0,0,0,0,0};
+	      reachable_hooks_indiv[hook_name] = new Str2Int;
     }
 }
 
-void GatingLSM::add_reachable(StringRef hook, Function *callee) {
-  std:string hook_name = hook;
-  errs() << "<!> REACHABLE: " << callee->getName() << " <-> " << hook << "\n";
+// void GatingLSM::add_reachable(StringRef hook, Function *callee) {
+//   std:string hook_name = hook;
+//   errs() << "<!> REACHABLE: " << callee->getName() << " <-> " << hook << "\n";
+//   // attribute hooks functions reachable by a wrapper to all wrapped functions
+//   if (wrapper_mode) {
+//     for (auto f : lsm_wrapper_functions) {
+//       if (f->getName() == callee->getName()) {
+//         add_reachable_from_wrapper(hook, callee);
+//         return;
+//       }
+//     }
+//     Str2Int *hook_mappings = ((Str2Int *)reachable_hooks_indiv[callee->getName()]);
+//     (*hook_mappings)[hook_name] = 1;
+//   } else {
+//     reachable_hooks[hook_name] = 1;
+//   }
+// }
+
+void GatingLSM::add_reachable(StringRef lsmhook, StringRef audhook) {
+  std::string lsm_name = lsmhook;
+  std::string aud_name = audhook;
+  // errs() << "<!> REACHABLE: " << lsm_name << " <-> " << aud_name << "\n";
   // attribute hooks functions reachable by a wrapper to all wrapped functions
-  if (wrapper_mode) {
-    for (auto f : lsm_wrapper_functions) {
-      if (f->getName() == callee->getName()) {
-        add_reachable_from_wrapper(hook, callee);
-        return;
-      }
-    }
-    Str2Int *hook_mappings = ((Str2Int *)reachable_hooks_indiv[callee->getName()]);
-    (*hook_mappings)[hook_name] = 1;
-  } else {
-    reachable_hooks[hook_name] = 1;
+
+  reachable_hooks[lsm_name][0] = 1;
+
+  if (aud_name == "audit_log_task_context") {
+    reachable_hooks[lsm_name][1] = 1;
   }
+  else if (aud_name == "audit_log_task_info") {
+    reachable_hooks[lsm_name][2] = 1;
+  }
+  else if (aud_name == "audit_log_secctx") {
+    reachable_hooks[lsm_name][3] = 1;
+  }
+  else if (aud_name == "audit_log_start") {
+    reachable_hooks[lsm_name][4] = 1;
+  }
+  else if (aud_name == "audit_log_end") {
+    reachable_hooks[lsm_name][5] = 1;
+  }
+  else if (aud_name == "audit_log_format") {
+    reachable_hooks[lsm_name][6] = 1;
+  }
+  else if (aud_name == "audit_log") {
+    reachable_hooks[lsm_name][7] = 1;
+  } 
 }
 
-void GatingLSM::add_reachable_from_wrapper(StringRef hook, Function *callee) {
-  std:string hook_name = hook;
-  if (lsm_wrapper_functions.find(callee) != lsm_wrapper_functions.end()) {
-    FunctionSet fset = *((FunctionSet*)(lsm_wrapper_to_hook[callee]));
-    for (auto f : fset) {
-      // extend reachability to each individual LSM hook that's wrapped
-      Str2Int *hook_mappings = ((Str2Int *)reachable_hooks_indiv[f->getName()]);
-      (*hook_mappings)[hook_name] = 1;
-    }
-  }
+// void GatingLSM::add_reachable_from_wrapper(StringRef hook, Function *callee) {
+//   std:string hook_name = hook;
+//   if (lsm_wrapper_functions.find(callee) != lsm_wrapper_functions.end()) {
+//     FunctionSet fset = *((FunctionSet*)(lsm_wrapper_to_hook[callee]));
+//     for (auto f : fset) {
+//       // extend reachability to each individual LSM hook that's wrapped
+//       Str2Int *hook_mappings = ((Str2Int *)reachable_hooks_indiv[f->getName()]);
+//       (*hook_mappings)[hook_name] = 1;
+//     }
+//   }
+// }
+
+FunctionSet GatingLSM::get_hook_from_wrapper(Function* f){
+  FunctionSet fset = *((FunctionSet*)(lsm_wrapper_to_hook[f]));
+  return fset;
 }
 
 void GatingLSM::dump_reachable(std::string& filename) {
   ofstream mapfile;
   mapfile.open (filename);
   if (wrapper_mode) {
-    mapfile << "Callee, Hook, Reachable\n";
-    for (auto x : reachable_hooks_indiv){
-      Str2Int reachable_indiv = *(x.second);
-      for (auto y : reachable_indiv){
-        mapfile << x.first << ":" << y.first << "," << y.second << "\n";
-      }
-    }
-  } else {
-    mapfile << "Hook, Reachable\n";
+    mapfile << "LSM Hook, reachable, task_context, task_info, secctx, start, end, format, log\n";
     for (auto x : reachable_hooks){
-      mapfile << x.first << "," << x.second << "\n";
+      mapfile << x.first << "," << x.second[0] << "," << x.second[1] << "," <<x.second[2] << "," <<x.second[3] << "," <<x.second[4] << "," <<x.second[5] << "," <<x.second[6] << "," <<x.second[7] <<  "\n";
     }
   }
   mapfile.close();
@@ -407,8 +435,14 @@ again:
         for (unsigned int i = 0; i < ci->getNumOperands(); i++) {
           Value *a = ci->getOperand(i);
           if (use_parent_func_arg_deep(a, userf) >= 0) {
+            errs() << " --- INSERTING WRAPPER --- " << "\n";
             wrappers.insert(userf);
-	    lsm_wrapper_to_hook[userf]->insert(callee);
+            if(lsm_wrapper_to_hook[userf]){
+              lsm_wrapper_to_hook[userf]->insert(lsmh);
+            } else {
+              lsm_wrapper_to_hook[userf] =  new FunctionSet;
+              lsm_wrapper_to_hook[userf]->insert(lsmh);
+            }     
             break;
           }
         }
@@ -424,11 +458,15 @@ again:
     if (loop_cnt < 1)
       goto again;
   }
+
+  errs() << " ----- LSM WRAPPERS ------ " << "\n";
+  for (auto fi : lsm_wrapper_functions){
+    errs() << fi->getName() << "\n";
+  }
 }
 
 bool GatingLSM::is_gating_function(Function *f) {
-  return (lsm_hook_functions.find(f) != lsm_hook_functions.end()) || 
-	  (lsm_wrapper_functions.find(f) != lsm_wrapper_functions.end());
+  return (lsm_hook_functions.find(f) != lsm_hook_functions.end());
 }
 
 bool GatingLSM::is_gating_function(std::string &str) {
@@ -436,6 +474,10 @@ bool GatingLSM::is_gating_function(std::string &str) {
     if (f->getName() == str)
       return true;
   }
+  return false;
+}
+
+bool GatingLSM::is_wrapper_function(std::string &str) {
   for (auto f : lsm_wrapper_functions) {
     if (f->getName() == str)
       return true;
@@ -444,6 +486,8 @@ bool GatingLSM::is_gating_function(std::string &str) {
 }
 
 bool GatingLSM::is_wrapper_function(Function *f) {
+  // errs() << "IS WRAPPER CALLED " << f->getName() << "\n";
+  // errs() << "return: " << (lsm_wrapper_functions.find(f) != lsm_wrapper_functions.end()) << "\n";
   return lsm_wrapper_functions.find(f) != lsm_wrapper_functions.end();
 }
 
