@@ -1,14 +1,29 @@
-Gatlin: Gating Function Checker for Linux Kernel
+Gatlin: Gating Function Checker for Linux Kernel (Updated FORK for CS 598 Project)
 -------
 
-This checker figures out critical resource(callee of direct/indirect callsite,
-global variable use, interesting struct type and field use) by looking at existing
-CAP/LSM/DAC check, then explore which path that uses such resource is not guarded by
-those check.
+This repo builds upon the PeX tool to find the mappings between LSM and Audit Hooks. The code for reachability analysis in built on top of PeX (can be seen in the new commit diffs)
 
-# bugs discovered 
 
-see ```log/bug_report.md```
+
+# LSM <-> AUDIT Mapping Results 
+
+The mappings between LSM<->Audit are stored in the folders:
+
+**Folder : mapping_initial** 
+* Simple reachability analysis 
+* States whether LSM hook is reachable from any audit hook or not
+
+**Folder : mapping_no_wrappers**  
+* Fine-grained reachability analysis 
+* Specifies the exact audit hooks that the LSM hooks are reachable from 
+* Does not cater to LSM wrappers
+
+**Folder : mapping_wrappers** 
+* Fine-grained reachability analysis 
+* specifies the exact audit hooks that the LSM hooks are reachable from 
+* Also caters to LSM wrappers)
+
+# SETUP INSTRUCTIONS
 
 # prerequisites
 
