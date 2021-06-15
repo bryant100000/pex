@@ -97,6 +97,8 @@ private:
   void identify_interesting_struct(Module &);
   void identify_kmi(Module &);
   void identify_dynamic_kmi(Module &);
+  void add_mapping(StringRef, StringRef );
+  void dump_mapping();
 
   void populate_indcall_list_using_cvf(Module &);
   void populate_indcall_list_through_kmi(Module &);
@@ -219,6 +221,10 @@ private:
 
   // Audit-only
   GatingFunctionBase *gating_other;
+
+  // new-addition for storing mappings
+
+  StringSet mapping_store;
 
   // map function to its check instruction
   Function2ChkInst f2ci;

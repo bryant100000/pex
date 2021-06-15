@@ -55,6 +55,21 @@ public:
   virtual void dump();
 };
 
+class GatingSyscall : public GatingFunctionBase {
+protected:
+  FunctionSet syscall_functions;
+
+private:
+  bool is_syscall_func(StringRef &);
+
+public:
+  GatingSyscall(Module &);
+  ~GatingSyscall(){};
+  virtual bool is_gating_function(Function *);
+  virtual bool is_gating_function(std::string &);
+  virtual void dump();
+};
+
 class GatingCap : public GatingFunctionBase {
 protected:
   /*

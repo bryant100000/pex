@@ -701,3 +701,50 @@ void GatingAudit::dump() {
   }
   errs() << "=o=\n";
 }
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Sycalls 
+
+
+bool GatingSyscall::is_syscall_func(StringRef &str) {
+  if (str.startswith("sys_") || str.startswith("SyS_")){
+    return true;
+  }
+  return false;
+}
+
+GatingSyscall::GatingSyscall(Module &module)
+    : GatingFunctionBase(module) {
+  errs() << "Gating Function Type: Sycall\n";
+  for (Module::iterator fi = module.begin(), f_end = module.end(); fi != f_end;
+       ++fi) {
+    Function *func = dyn_cast<Function>(fi);
+    StringRef fname = func->getName();
+    if (is_syscall_func(fname)) {
+      syscall_functions.insert(func);
+    }
+  }
+}
+
+bool GatingSyscall::is_gating_function(Function *f) {
+  return syscall_functions.find(f) != syscall_functions.end();
+}
+
+bool GatingSyscall::is_gating_function(std::string &str) {
+  for (auto f : syscall_functions) {
+    if (f->getName() == str)
+      return true;
+  }
+  return false;
+}
+
+void GatingSyscall::dump() {
+  errs() << ANSI_COLOR(BG_BLUE, FG_WHITE)
+         << "=Syscall functions (total:" << syscall_functions.size()
+         << ")=" << ANSI_COLOR_RESET << "\n";
+  for (auto f : syscall_functions) {
+    errs() << ". " << f->getName() << "\n";
+  }
+  errs() << "=o=\n";
+}

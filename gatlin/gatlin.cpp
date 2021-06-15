@@ -229,6 +229,11 @@ void gatlin::dump_non_kinit() {
 void gatlin::dump_gating() {
   if (!knob_gatlin_caw)
     return;
+  if (knob_gating_type == "audit-lsm" || knob_gating_type == "lsm-audit" || knob_gating_type == "sys-audit" || knob_gating_type == "sys-lsm"){
+    gating->dump();
+    gating_other->dump();
+    return;
+  }
   gating->dump();
 }
 
@@ -1253,7 +1258,7 @@ FunctionSet gatlin::resolve_indirect_callee(CallInst *ci) {
  * f2chks: Function to Gating Function CallSite
  */
 void gatlin::collect_chkps(Module &module) {
-  if (knob_gating_type == "audit-lsm" || knob_gating_type == "lsm-audit")
+  if (knob_gating_type == "audit-lsm" || knob_gating_type == "lsm-audit" || knob_gating_type == "sys-audit" || knob_gating_type == "sys-lsm")
     return _collect_chkps_audit(module);
 
   for (auto func : all_functions) {
@@ -1294,7 +1299,7 @@ void gatlin::collect_chkps(Module &module) {
 #endif
 }
 
-// Audit-LSM mapping version
+// Audit-LSM-Sys mapping version
 void gatlin::_collect_chkps_audit(Module &module) {
   for (auto func : all_functions) {
     if (gating->is_gating_function(func) || gating_other->is_gating_function(func))
@@ -1313,37 +1318,48 @@ void gatlin::_collect_chkps_audit(Module &module) {
            ++ii) {
         if (CallInst *ci = dyn_cast<CallInst>(ii))
           if (Function *_f = get_callee_function_direct(ci)) {
+
             if (knob_gating_type == "lsm-audit" && (gating->is_gating_function(_f))){
               chks->insert(ci);
-              // errs() << "INSERTING CHECKS " << *ci << "\n"; 
             }
-
             if (knob_gating_type == "lsm-audit" && (gating->is_wrapper_function(_f))){
               chks->insert(ci);
-              // errs() << "INSERTING CHECKS " << *ci << "\n"; 
             }
             if (knob_gating_type == "audit-lsm" && (gating->is_gating_function(_f)) ){
               chks->insert(ci);
-              // errs() << "INSERTING CHECKS " << *ci << "\n"; 
+            }
+
+            if (knob_gating_type == "sys-lsm" && (gating->is_gating_function(_f)) ){
+              chks->insert(ci);
+            }
+
+            if (knob_gating_type == "sys-audit" && (gating->is_gating_function(_f)) ){
+              chks->insert(ci);
             }
 	    
-      if (knob_gating_type == "lsm-audit" && gating_other->is_gating_function(_f)) {
-	      // errs() << "<> Found gating (other): " << _f->getName() << "\n";
-	      critical_functions.insert(_f);
-        // errs() << "INSERTING CRITICAL FUNCTIONS:  " << _f->getName() << "\n"; 
-	    }
+            if (knob_gating_type == "lsm-audit" && gating_other->is_gating_function(_f)) {
+      	      critical_functions.insert(_f);
+      	    }
 
-      if (knob_gating_type == "audit-lsm" && gating_other->is_gating_function(_f)) {
-        // errs() << "<> Found gating (other): " << _f->getName() << "\n";
-        critical_functions.insert(_f);
-        // errs() << "INSERTING CRITICAL FUNCTIONS:  " << _f->getName() << "\n"; 
-      }
+            if (knob_gating_type == "audit-lsm" && gating_other->is_gating_function(_f)) {
+              critical_functions.insert(_f);
+            }
 
-      if (knob_gating_type == "audit-lsm" && gating_other->is_wrapper_function(_f)) {
-        // errs() << "<> Found gating (other): " << _f->getName() << "\n";
-        critical_functions.insert(_f);
-        // errs() << "INSERTING CRITICAL FUNCTIONS:  " << _f->getName() << "\n"; 
-      }
+            if (knob_gating_type == "audit-lsm" && gating_other->is_wrapper_function(_f)) {
+              critical_functions.insert(_f);
+            }
+
+            if (knob_gating_type == "sys-lsm" && gating_other->is_gating_function(_f)) {
+              critical_functions.insert(_f);
+            }
+
+            if (knob_gating_type == "sys-lsm" && gating_other->is_wrapper_function(_f)) {
+              critical_functions.insert(_f);
+            }
+
+            if (knob_gating_type == "sys-audit" && gating_other->is_gating_function(_f)) {
+              critical_functions.insert(_f);
+            }
 
 
           }
@@ -1690,8 +1706,10 @@ void gatlin::preprocess(Module &module) {
     }
     fl->insert(func);
 
-    if (is_syscall_prefix(func->getName()))
+    if (is_syscall_prefix(func->getName())){
+      // errs() << func->getName() << "\n";
       syscall_list.insert(func);
+    }
 
     for (Function::iterator fi = func->begin(), fe = func->end(); fi != fe;
          ++fi) {
@@ -1903,14 +1921,14 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
             if (CallInst *ci = dyn_cast<CallInst>(chk)){
               if (Function *_f = get_callee_function_direct(ci)){
                 if (gating->is_gating_function(_f)){
-                  gating->add_reachable(_f->getName(), crit_func->getName()); 
+                  add_mapping(_f->getName(), crit_func->getName()); 
                 }
                 if (gating->is_wrapper_function(_f)){
                   FunctionSet fset = gating->get_hook_from_wrapper(_f);
                   for (auto fu : fset) {
-                    errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
+                    // errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
 
-                    gating->add_reachable(fu->getName(), crit_func->getName());
+                    add_mapping(fu->getName(), crit_func->getName());
                   } 
                 }
               }
@@ -1923,21 +1941,56 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
               if (Function *_f = get_callee_function_direct(ci)){
                 if (gating->is_gating_function(_f)){
                   if(gating_other->is_gating_function(crit_func)){
-                   gating_other->add_reachable(crit_func->getName(), _f->getName() ); 
+                   add_mapping(_f->getName(), crit_func->getName()); 
                   }
                   else if(gating_other->is_wrapper_function(crit_func)){
                     // errs() << " --- NEED TO FIND WRAPPERS ---!!!" << "\n";
                     FunctionSet fset = gating_other->get_hook_from_wrapper(crit_func);
                     for (auto fu : fset) {
                       // errs() << "corresponding lsm hook" << fu->getName() << "\n";
-                      errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
-                      gating_other->add_reachable(fu->getName(), _f->getName());
+                      // // errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
+                      add_mapping(f->getName(), fu->getName());
                     }
                   }
                 }
               }
             }
           }
+
+          if(knob_gating_type == "sys-lsm"){
+            if (CallInst *ci = dyn_cast<CallInst>(chk)){
+              if (Function *_f = get_callee_function_direct(ci)){
+                if (gating->is_gating_function(_f)){
+                  if(gating_other->is_gating_function(crit_func)){
+                   add_mapping(_f->getName(), crit_func->getName() ); 
+                  }
+                  else if(gating_other->is_wrapper_function(crit_func)){
+                    // errs() << " --- NEED TO FIND WRAPPERS ---!!!" << "\n";
+                    FunctionSet fset = gating_other->get_hook_from_wrapper(crit_func);
+                    for (auto fu : fset) {
+                      // errs() << "corresponding lsm hook" << fu->getName() << "\n";
+                      // // errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
+                      add_mapping(_f->getName(), fu->getName());
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          if(knob_gating_type == "sys-audit"){
+            if (CallInst *ci = dyn_cast<CallInst>(chk)){
+              if (Function *_f = get_callee_function_direct(ci)){
+                if (gating->is_gating_function(_f)){
+                  if(gating_other->is_gating_function(crit_func)){
+                   add_mapping(_f->getName(), crit_func->getName()); 
+                  }
+                }
+              }
+            }
+          }
+
+
         good++;
         
       }
@@ -2838,7 +2891,7 @@ rescan_and_add_all:
   /*
    * checked, merge forward slicing result(intra-) and collect more(inter-)
    */
-  if (knob_gating_type != "audit-lsm" && knob_gating_type != "lsm-audit") {
+  if (knob_gating_type != "audit-lsm" && knob_gating_type != "lsm-audit" && knob_gating_type != "sys-audit" && knob_gating_type != "sys-lsm") {
     for (auto i : current_crit_funcs) 
       critical_functions.insert(i);
   } 
@@ -2907,6 +2960,26 @@ void gatlin::my_debug(Module &module) {
   errs() << "# fsm targets:" << targets << "\n";
 }
 
+// new functions
+
+void gatlin::add_mapping(StringRef reach, StringRef from) {
+  std::string reach_hook = reach;
+  std::string from_hook = from;
+  std::string to_store = reach_hook + " < " + from_hook;
+  mapping_store.insert(to_store);
+}
+
+void gatlin::dump_mapping() {
+   std::string filename = knob_gating_type + ".txt";
+   StringSet::iterator it;
+   ofstream mappingfile;
+   mappingfile.open (filename);
+   for (it = mapping_store.begin(); it != mapping_store.end(); it++){
+      mappingfile << *it << "\n";
+   }
+   mappingfile.close();
+}
+
 /*
  * process capability protected globals and functions
  */
@@ -2941,11 +3014,22 @@ void gatlin::process_cpgf(Module &module) {
     gating = new GatingLSM(module, knob_lsm_function_list, 1);
     gating_other = new GatingAudit(module, knob_audit_function_list);
   }
+  else if (knob_gating_type == "sys-audit") {
+    // discover LSM [default gating module] -> Audit mappings
+    gating = new GatingSyscall(module);
+    gating_other = new GatingAudit(module, knob_audit_function_list);
+  }
+  else if (knob_gating_type == "sys-lsm") {
+    // discover LSM [default gating module] -> Audit mappings
+    gating = new GatingSyscall(module);
+    gating_other = new GatingLSM(module, knob_lsm_function_list, 1);    
+  }
   else
     llvm_unreachable("invalid setting!");
   STOP_WATCH_STOP(WID_0);
   STOP_WATCH_REPORT(WID_0);
   dump_gating();
+
 
   // pass 0
   errs() << "Collect Checkpoints\n";
@@ -3005,15 +3089,17 @@ void gatlin::process_cpgf(Module &module) {
     STOP_WATCH_MON(WID_0, check_critical_type_field_usage(module));
   }
   dump_non_kinit();
+
   errs() << "DUMPING REACHABLE HOOKS IN CSV FILE" << "\n";
-  if (knob_gating_type == "audit-lsm"){
-    std::string filename = "audit_lsm_mapping.csv";
-    gating_other->dump_reachable(filename);
-  }
-  if (knob_gating_type == "lsm-audit"){
-    std::string filename = "lsm_audit_mapping.csv";
-    gating->dump_reachable(filename);
-  }
+  dump_mapping();
+  // if (knob_gating_type == "audit-lsm"){
+  //   std::string filename = "audit_lsm_mapping.csv";
+  //   gating_other->dump_reachable(filename);
+  // }
+  // if (knob_gating_type == "lsm-audit"){
+  //   std::string filename = "lsm_audit_mapping.csv";
+  //   gating->dump_reachable(filename);
+  // }
   
   delete skip_funcs;
   delete skip_vars;
