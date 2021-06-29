@@ -129,6 +129,7 @@ void gatlin::dump_as_good(InstructionList &callstk) {
   errs() << "\n"
          << ANSI_COLOR_GREEN << "=GOOD PATH=" << ANSI_COLOR_RESET << "\n";
   dump_callstack(callstk);
+  // dump_a_path(callstk);
 }
 
 void gatlin::dump_as_bad(InstructionList &callstk) {
@@ -1921,14 +1922,14 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
             if (CallInst *ci = dyn_cast<CallInst>(chk)){
               if (Function *_f = get_callee_function_direct(ci)){
                 if (gating->is_gating_function(_f)){
-                  add_mapping(_f->getName(), crit_func->getName()); 
+                  add_mapping(_f->getName(), crit_func->getName(), callgraph); 
                 }
                 if (gating->is_wrapper_function(_f)){
                   FunctionSet fset = gating->get_hook_from_wrapper(_f);
                   for (auto fu : fset) {
                     // errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
 
-                    add_mapping(fu->getName(), crit_func->getName());
+                    add_mapping(fu->getName(), crit_func->getName(), callgraph);
                   } 
                 }
               }
@@ -1941,7 +1942,7 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
               if (Function *_f = get_callee_function_direct(ci)){
                 if (gating->is_gating_function(_f)){
                   if(gating_other->is_gating_function(crit_func)){
-                   add_mapping(_f->getName(), crit_func->getName()); 
+                   add_mapping(_f->getName(), crit_func->getName(), callgraph); 
                   }
                   else if(gating_other->is_wrapper_function(crit_func)){
                     // errs() << " --- NEED TO FIND WRAPPERS ---!!!" << "\n";
@@ -1949,7 +1950,7 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
                     for (auto fu : fset) {
                       // errs() << "corresponding lsm hook" << fu->getName() << "\n";
                       // // errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
-                      add_mapping(f->getName(), fu->getName());
+                      add_mapping(f->getName(), fu->getName(), callgraph);
                     }
                   }
                 }
@@ -1962,7 +1963,7 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
               if (Function *_f = get_callee_function_direct(ci)){
                 if (gating->is_gating_function(_f)){
                   if(gating_other->is_gating_function(crit_func)){
-                   add_mapping(_f->getName(), crit_func->getName() ); 
+                   add_mapping(_f->getName(), crit_func->getName() , callgraph); 
                   }
                   else if(gating_other->is_wrapper_function(crit_func)){
                     // errs() << " --- NEED TO FIND WRAPPERS ---!!!" << "\n";
@@ -1970,7 +1971,7 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
                     for (auto fu : fset) {
                       // errs() << "corresponding lsm hook" << fu->getName() << "\n";
                       // // errs() << "ADDING FROM WRAPPER MAPPING: " << fu->getName()  << "\n";
-                      add_mapping(_f->getName(), fu->getName());
+                      add_mapping(_f->getName(), fu->getName(), callgraph);
                     }
                   }
                 }
@@ -1983,7 +1984,8 @@ void gatlin::backward_slice_build_callgraph(InstructionList &callgraph,
               if (Function *_f = get_callee_function_direct(ci)){
                 if (gating->is_gating_function(_f)){
                   if(gating_other->is_gating_function(crit_func)){
-                   add_mapping(_f->getName(), crit_func->getName()); 
+                   add_mapping(_f->getName(), crit_func->getName(), callgraph);
+                   // dump_as_good(callgraph); 
                   }
                 }
               }
@@ -2057,7 +2059,7 @@ ignored_out:
 
 good_out:
   fvisited[f] = RCHKED;
-  dump_as_good(callgraph);
+  // dump_as_good(callgraph);
   callgraph.pop_back();
   return;
 
@@ -2962,11 +2964,23 @@ void gatlin::my_debug(Module &module) {
 
 // new functions
 
-void gatlin::add_mapping(StringRef reach, StringRef from) {
+void gatlin::add_mapping(StringRef reach, StringRef from, InstructionList &callstk) {
   std::string reach_hook = reach;
   std::string from_hook = from;
   std::string to_store = reach_hook + " < " + from_hook;
-  mapping_store.insert(to_store);
+
+  mappingfile << reach_hook << " < " << from_hook;
+  mappingfile << " path: ";
+  for (auto *I : callstk) {
+    std::string dbgInfo;
+    llvm::raw_string_ostream rso(dbgInfo);
+    I->getDebugLoc().print(rso);
+
+    std::string f_name = I->getFunction()->getName();
+    
+    mappingfile <<  "(" << f_name << "," <<  rso.str() << ") ";
+  }
+  mappingfile << "\n";
 }
 
 void gatlin::dump_mapping() {
@@ -2995,6 +3009,8 @@ void gatlin::process_cpgf(Module &module) {
   errs() << "Pre-processing...\n";
   STOP_WATCH_MON(WID_0, preprocess(module));
   errs() << "Found " << syscall_list.size() << " syscalls\n";
+  std::string filename = knob_gating_type + ".txt";
+  mappingfile.open (filename);
 
   errs() << "Process Gating Functions\n";
   STOP_WATCH_START(WID_0);
@@ -3091,7 +3107,8 @@ void gatlin::process_cpgf(Module &module) {
   dump_non_kinit();
 
   errs() << "DUMPING REACHABLE HOOKS IN CSV FILE" << "\n";
-  dump_mapping();
+  mappingfile.close();
+  // dump_mapping();
   // if (knob_gating_type == "audit-lsm"){
   //   std::string filename = "audit_lsm_mapping.csv";
   //   gating_other->dump_reachable(filename);

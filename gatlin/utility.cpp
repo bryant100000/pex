@@ -1145,8 +1145,15 @@ void dump_callstack(InstructionList &callstk) {
   int cnt = 0;
 
   for (auto *I : callstk) {
+    if(!I->getDebugLoc()){
+      errs() << "NO METADATE INFO" << "\n";
+    }
+    std::string dbgInfo;
+    llvm::raw_string_ostream rso(dbgInfo);
+    I->getDebugLoc().print(rso);
     errs() << "" << cnt << " " << I->getFunction()->getName() << " ";
     I->getDebugLoc().print(errs());
+    // errs() << rso.str();
     errs() << "\n";
     cnt++;
   }
@@ -1211,10 +1218,10 @@ void dump_a_path(InstructionList &callstk) {
     Function *f = il[0]->getFunction();
     auto fname = f->getName();
     errs() << "Function:" << fname << "\n";
-    for (unsigned int j = 0; j < il.size(); j++) {
-      il[j]->print(errs());
-      errs() << "\n";
-    }
+    // for (unsigned int j = 0; j < il.size(); j++) {
+    //   il[j]->print(errs());
+    //   errs() << "\n";
+    // }
   }
   errs() << ANSI_COLOR_GREEN << "-------------" << ANSI_COLOR_RESET << "\n";
 }

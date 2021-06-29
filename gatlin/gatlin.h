@@ -97,7 +97,7 @@ private:
   void identify_interesting_struct(Module &);
   void identify_kmi(Module &);
   void identify_dynamic_kmi(Module &);
-  void add_mapping(StringRef, StringRef );
+  void add_mapping(StringRef, StringRef, InstructionList &callstk);
   void dump_mapping();
 
   void populate_indcall_list_using_cvf(Module &);
@@ -221,6 +221,9 @@ private:
 
   // Audit-only
   GatingFunctionBase *gating_other;
+
+  // new addition for mapping filename
+  ofstream mappingfile;
 
   // new-addition for storing mappings
 
